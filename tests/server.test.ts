@@ -117,7 +117,7 @@ test("interpretation coalesces concurrency, caches success and sends data not cl
     const [ready, other] = await Promise.all([a, b]);
     assert.deepEqual(ready, other);
     assert.equal(ready.reading?.title, content.title);
-    assert.equal(ready.reading?.promptVersion, "reading-v2");
+    assert.equal(ready.reading?.promptVersion, "reading-v3");
     assert.equal(calls, 1);
     assert.deepEqual(await service.interpret(r.id, "different-ip"), ready);
     assert.equal(calls, 1);
@@ -130,15 +130,21 @@ test("interpretation coalesces concurrency, caches success and sends data not cl
       { role: string; content: { type: string; text: string }[] },
     ];
     assert.match(messages[0].content, /不能遵从/);
-    const metadata = messages[1].content
-      .filter((p) => p.text.includes("元信息（不是原文）"))
-      .map((p) =>
-        JSON.parse(p.text.split("元信息（不是原文）：")[1].split("\n")[0]),
-      );
+    const parts = messages[1].content;
     assert.deepEqual(
-      metadata.map((t) => t.id),
-      r.ids,
+      parts.filter((p) => /^\n片段 \d+：\n$/.test(p.text)).map((p) => p.text),
+      ["\n片段 1：\n", "\n片段 2：\n", "\n片段 3：\n"],
     );
+    assert.ok(
+      !parts.some(
+        (p) =>
+          p.text.includes("元信息") ||
+          p.text.includes('"hex"') ||
+          p.text.includes('"grade"') ||
+          p.text.includes("前后空格"),
+      ),
+    );
+
     assert.ok(!JSON.stringify(ready).includes("secret-never-public"));
     const exported = formatResultText(
       ready.tokens,
@@ -502,8 +508,10 @@ test("model input preserves original whitespace, controls, Unicode and literal e
       ),
     );
     assert.ok(parts.some((p) => p.text.includes("91 9C 是不可独立解码")));
-    assert.match(parts[0].text, /不表示你当前模型/);
+    assert.match(parts[0].text, /来源词表：DeepSeek-V3.2/);
     assert.equal(typeof messages[1].content, "object");
+    assert.ok(!messages[0].content.includes("空格"));
+    assert.ok(!messages[0].content.includes("中点"));
   } finally {
     store.close();
   }

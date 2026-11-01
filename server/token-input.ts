@@ -57,14 +57,14 @@ export function buildInterpretationInput(record: DrawRecord): TextPart[] {
   const parts: TextPart[] = [
     {
       type: "text",
-      text: `词元来源词表：DeepSeek-V3.2；版本 ${record.version}。以下 ID 只属于来源词表，不表示你当前模型的 token ID，也不保证每个原文块在你模型中仍是单个 token。\n元信息与字节说明不是原文。标为原文的独立 text 内容块保留全部原字符、前后空格、换行和控制字符；内容块的边界不是词元内容。`,
+      text: `来源词表：DeepSeek-V3.2（${record.version}）。请结合以下文字片段作整体释读。`,
     },
   ];
   record.tokens.forEach((t, index) => {
     const segments = literalTokenSegments(t);
     parts.push({
       type: "text",
-      text: `\n词元 ${index + 1} 元信息（不是原文）：${JSON.stringify({ id: t.id, type: t.type, grade: t.grade, byteLength: t.length, hex: t.hex, utf8Complete: segments.every((s) => s.kind === "text") })}\n后续是此词元的原文内容块，遇到不可解码字节时会单独说明：\n`,
+      text: `\n片段 ${index + 1}：\n`,
     });
     for (const segment of segments) {
       parts.push({
