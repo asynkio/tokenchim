@@ -117,7 +117,7 @@ test("interpretation coalesces concurrency, caches success and sends data not cl
     const [ready, other] = await Promise.all([a, b]);
     assert.deepEqual(ready, other);
     assert.equal(ready.reading?.title, content.title);
-    assert.equal(ready.reading?.promptVersion, "reading-v4");
+    assert.equal(ready.reading?.promptVersion, "reading-v5");
     assert.equal(calls, 1);
     assert.deepEqual(await service.interpret(r.id, "different-ip"), ready);
     assert.equal(calls, 1);
@@ -510,7 +510,10 @@ test("model input preserves original whitespace, controls, Unicode and literal e
       ),
     );
     assert.ok(parts.some((p) => p.text.includes("91 9C 是不可独立解码")));
-    assert.match(parts[0].text, /来源词表：DeepSeek-V3.2/);
+    assert.equal(parts[0].text, "请仅结合以下编号文字片段作整体释读。");
+    assert.ok(!JSON.stringify(messages).includes("DeepSeek-V3.2"));
+    assert.ok(!JSON.stringify(messages).includes(r.version));
+    assert.match(messages[0].content, /不将说明文字或示例当作抽签结果/);
     assert.equal(typeof messages[1].content, "object");
     assert.ok(!messages[0].content.includes("空格"));
     assert.ok(!messages[0].content.includes("中点"));

@@ -57,7 +57,7 @@ export function buildInterpretationInput(record: DrawRecord): TextPart[] {
   const parts: TextPart[] = [
     {
       type: "text",
-      text: `来源词表：DeepSeek-V3.2（${record.version}）。请结合以下文字片段作整体释读。`,
+      text: "请仅结合以下编号文字片段作整体释读。",
     },
   ];
   record.tokens.forEach((t, index) => {
