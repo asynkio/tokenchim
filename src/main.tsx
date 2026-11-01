@@ -1,82 +1,163 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  draw,
-  decodeShare,
-  VOCAB_VERSION,
-  RATING_VERSION,
-  type Dataset,
-  type Token,
-} from "./core";
+import type { DrawRecord } from "./contracts";
+import { health, createDraw, loadShare, getDraw, interpretDraw } from "./api";
 import { SharePanel } from "./SharePanel";
 import "./style.css";
 import { TokenCard } from "./TokenCard";
+import { ReadingPanel } from "./ReadingPanel";
 function App() {
-  const [data, setData] = useState<Dataset | null>(null),
+  const [ready, setReady] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [cards, setCards] = useState<Token[]>([]),
+    [record, setRecord] = useState<DrawRecord | null>(null),
     [count, setCount] = useState(3),
     [busy, setBusy] = useState(false),
-    [turn, setTurn] = useState(0);
-  const lock = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    [turn, setTurn] = useState(0),
+    [readingRequest, setReadingRequest] = useState(false),
+    [readingError, setReadingError] = useState("");
+  const cards = record?.tokens ?? [];
+  const sequence = useRef(0),
+    lock = useRef(false),
+    controller = useRef<AbortController | null>(null);
   async function load() {
     setError("");
     try {
-      const r = await fetch(`${import.meta.env.BASE_URL}data/tokens.json`);
-      if (!r.ok) throw Error("词表加载失败");
-      const d: Dataset = await r.json();
-      if (
-        d.version !== VOCAB_VERSION ||
-        d.rating !== RATING_VERSION ||
-        d.tokens.length !== 128815
-      )
-        throw Error("词表版本或数量异常");
-      setData(d);
+      const status = await health();
+      setReady(status.ready);
     } catch {
-      setError("词表暂时无法加载，请检查网络后重试。");
+      setError("签单服务暂时无法连接，请重试。");
     }
   }
   useEffect(() => {
     void load();
     return () => {
-      if (timer.current) clearTimeout(timer.current);
+      sequence.current++;
+      controller.current?.abort();
     };
   }, []);
   useEffect(() => {
-    if (!data) return;
-    function restore() {
-      if (!location.hash) return;
+    if (!ready) return;
+    async function restore() {
+      const n = ++sequence.current;
+      controller.current?.abort();
+      const abort = new AbortController();
+      controller.current = abort;
+      setReadingRequest(false);
+      setReadingError("");
+      setNotice("");
+      if (!location.hash) {
+        setRecord(null);
+        setBusy(false);
+        lock.current = false;
+        return;
+      }
+      setBusy(true);
+      lock.current = true;
       try {
-        const result = decodeShare(location.hash, data!.tokens);
-        setCards(result);
-        setCount(result.length);
+        const next = await loadShare(location.hash, abort.signal);
+        if (n !== sequence.current) return;
+        setRecord(next);
+        setCount(next.tokens.length);
+        setTurn((t) => t + 1);
+        history.replaceState(
+          null,
+          "",
+          location.pathname + location.search + "#draw=" + next.id,
+        );
       } catch (e) {
-        setNotice((e as Error).message);
+        if (n === sequence.current && !abort.signal.aborted) {
+          setRecord(null);
+          setNotice((e as Error).message);
+        }
+      } finally {
+        if (n === sequence.current) {
+          setBusy(false);
+          lock.current = false;
+        }
       }
     }
-    restore();
+    void restore();
     addEventListener("hashchange", restore);
-    return () => removeEventListener("hashchange", restore);
-  }, [data]);
-  function summon() {
-    if (!data || lock.current) return;
+    return () => {
+      removeEventListener("hashchange", restore);
+      sequence.current++;
+      controller.current?.abort();
+    };
+  }, [ready]);
+  useEffect(() => {
+    if (record?.readingStatus !== "pending" || readingRequest || busy) return;
+    const id = record.id,
+      n = sequence.current;
+    const timer = setTimeout(() => {
+      void getDraw(id)
+        .then((next) => {
+          if (n === sequence.current) setRecord(next);
+        })
+        .catch(() => {
+          if (n === sequence.current)
+            setRecord((current) =>
+              current?.id === id
+                ? {
+                    ...current,
+                    readingStatus: "failed",
+                    readingError: "读取释读状态失败，请重试",
+                  }
+                : current,
+            );
+        });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [record, readingRequest, busy]);
+  async function summon() {
+    if (!ready || lock.current) return;
     lock.current = true;
     setBusy(true);
     setNotice("");
-    timer.current = setTimeout(() => {
-      try {
-        setCards(draw(data.tokens, count));
-        setTurn((t) => t + 1);
-        history.replaceState(null, "", location.pathname + location.search);
-      } catch (e) {
+    setReadingRequest(false);
+    setReadingError("");
+    const n = ++sequence.current;
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    try {
+      const next = await createDraw(count, abort.signal);
+      if (n !== sequence.current) return;
+      setRecord(next);
+      setTurn((t) => t + 1);
+      history.replaceState(
+        null,
+        "",
+        location.pathname + location.search + "#draw=" + next.id,
+      );
+    } catch (e) {
+      if (n === sequence.current && !abort.signal.aborted)
         setNotice((e as Error).message);
-      } finally {
-        lock.current = false;
+    } finally {
+      if (n === sequence.current) {
         setBusy(false);
+        lock.current = false;
       }
-    }, 450);
+    }
+  }
+  async function interpret() {
+    if (!record || readingRequest || busy) return;
+    const n = sequence.current,
+      id = record.id;
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    setReadingRequest(true);
+    setReadingError("");
+    try {
+      const next = await interpretDraw(id, abort.signal);
+      if (n === sequence.current) setRecord(next);
+    } catch (e) {
+      if (n === sequence.current && !abort.signal.aborted)
+        setReadingError((e as Error).message);
+    } finally {
+      if (n === sequence.current) setReadingRequest(false);
+    }
   }
   return (
     <>
@@ -158,12 +239,12 @@ function App() {
             </label>
             <button
               className="summon"
-              disabled={!data || busy}
+              disabled={!ready || busy}
               onClick={summon}
             >
               <span>✦</span>{" "}
-              {!data
-                ? "加载词表…"
+              {!ready
+                ? "连接签单服务…"
                 : busy
                   ? "正在召唤…"
                   : cards.length
@@ -172,11 +253,17 @@ function App() {
               <span>→</span>
             </button>
             <div className="share-slot">
-              {cards.length > 0 && (
-                <SharePanel tokens={cards} disabled={busy} />
-              )}
+              {record && <SharePanel record={record} disabled={busy} />}
             </div>
           </div>
+          {record && !busy && (
+            <ReadingPanel
+              record={record}
+              busy={readingRequest || record.readingStatus === "pending"}
+              error={readingError}
+              onInterpret={interpret}
+            />
+          )}
           {error && (
             <div className="error" role="alert">
               {error} <button onClick={load}>重新加载</button>

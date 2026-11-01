@@ -19,6 +19,10 @@ test("desktop empty state, draw lock, ten cards, copy fallback, PNG and ordered 
     path: "test-results/desktop-empty.png",
     fullPage: true,
   });
+  await page.route("**/api/draws", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await route.continue();
+  });
   await page.getByRole("combobox").selectOption("10");
   await page.getByRole("button", { name: "开启我的词元奇遇" }).click();
   await expect(page.getByRole("button", { name: "正在召唤…" })).toBeDisabled();
@@ -35,7 +39,9 @@ test("desktop empty state, draw lock, ten cards, copy fallback, PNG and ordered 
   const url = await page
     .getByRole("textbox", { name: "分享链接", exact: true })
     .inputValue();
+  await page.getByRole("button", { name: "关闭分享面板" }).click();
   await page.goto(url);
+  await page.reload();
   await expect(page.locator(".revealed")).toHaveCount(10);
   expect(await page.locator(".token-id").allTextContents()).toEqual(ids);
   await page.getByRole("button", { name: "分享", exact: true }).click();
@@ -130,13 +136,13 @@ test("invalid links and loading failure retry", async ({ page }) => {
   await page.goto("/" + fragment([1, 1]));
   await expect(page.getByRole("alert")).toContainText("重复");
   await expect(page.locator(".revealed")).toHaveCount(0);
-  await page.route("**/data/tokens.json", (route) =>
+  await page.route("**/api/health", (route) =>
     route.fulfill({ status: 503, body: "unavailable" }),
   );
   await page.goto("/");
-  await expect(page.getByRole("alert")).toContainText("加载");
+  await expect(page.getByRole("alert")).toContainText("连接");
   await expect(page.locator(".summon")).toBeDisabled();
-  await page.unroute("**/data/tokens.json");
+  await page.unroute("**/api/health");
   await page.getByRole("button", { name: "重新加载" }).click();
   await expect(
     page.getByRole("button", { name: "开启我的词元奇遇" }),
@@ -175,7 +181,7 @@ test("share auto-copy, text copy, retry, system share and cancellation", async (
   const url = await page
     .getByRole("textbox", { name: "分享链接", exact: true })
     .inputValue();
-  expect(url).toContain("ids=0%2C525%2C997");
+  expect(url).toContain("#draw=");
   await page.setViewportSize({ width: 700, height: 900 });
   expect(
     await page.evaluate(
@@ -313,10 +319,7 @@ test("minimal home, unpadded IDs, click flip and rules navigation", async ({
     "false",
   );
   await expect(card.locator(".byte-details")).toContainText("官方 special");
-  await expect(card.locator(".card-flipper")).toHaveCSS(
-    "transform-style",
-    "preserve-3d",
-  );
+
   const after = await card.boundingBox();
   expect(after!.height).toBeCloseTo(before!.height, 0);
   await page.screenshot({
@@ -345,7 +348,7 @@ test("touch flips in place, stays flipped on outside tap, and long details scrol
   });
   const page = await context.newPage();
   const longest = data.tokens.reduce((a, b) => (a.length > b.length ? a : b));
-  await page.goto("http://127.0.0.1:5173/" + fragment([longest.id, 24615]));
+  await page.goto("http://127.0.0.1:5174/" + fragment([longest.id, 24615]));
   const card = page.locator(".revealed").first();
   await expect(card).toHaveAttribute("aria-pressed", "false");
   await card.tap();
@@ -514,4 +517,184 @@ test("modal focus, reduced motion, PNG failure retry and stale copy completion",
   ).toBeEnabled();
   await page.getByRole("button", { name: "关闭分享面板" }).click();
   await expect(trigger).toBeFocused();
+});
+
+test("manual interpretation, saved share content and reading export", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/" + fragment([525, 223, 24615]));
+  await expect(
+    page.getByRole("button", { name: "释读此签", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".reading-section")).toHaveCount(0);
+  const id = new URL(page.url()).hash.slice("#draw=".length);
+  const original = await (await page.request.get("/api/draws/" + id)).json();
+  const reading = {
+    title: "留一束光给明天",
+    interpretation:
+      "这一组词元像散落在桌上的微光。完整的字句提醒你看见已经拥有的线索，尚未成形的字节则为新的想法留出空间。不必急着把所有碎片拼成答案，先选一件能够完成的小事，让行动慢慢照亮下一步。",
+    dos: ["整理一角桌面", "记录一个念头", "完成一件小事"],
+    donts: ["急于给出结论", "反复纠结细节", "忽略当下感受"],
+    model: "mock",
+    promptVersion: "reading-v1",
+    createdAt: new Date().toISOString(),
+  };
+  const ready = { ...original, readingStatus: "ready", reading };
+  let calls = 0;
+  await context.route("**/api/draws/" + id + "/interpret", async (route) => {
+    calls++;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await route.fulfill({ json: ready });
+  });
+  await page.getByRole("button", { name: "释读此签", exact: true }).click();
+  await expect(page.getByRole("button", { name: "正在释读…" })).toBeDisabled();
+  await expect(
+    page.getByRole("heading", { name: reading.title }),
+  ).toBeVisible();
+  await expect(page.locator(".reading-dos li")).toHaveCount(3);
+  await expect(page.locator(".reading-donts li")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "释读此签", exact: true }),
+  ).toHaveCount(0);
+  expect(calls).toBe(1);
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async (text: string) => {
+          (window as unknown as { copied: string }).copied = text;
+        },
+      },
+      configurable: true,
+    }),
+  );
+  await page.getByRole("button", { name: "分享", exact: true }).click();
+  const url = await page
+    .getByRole("textbox", { name: "分享链接", exact: true })
+    .inputValue();
+  expect(url).toContain("#draw=" + id);
+  await page.getByRole("button", { name: "复制结果文本", exact: true }).click();
+  const copied = await page.evaluate(
+    () => (window as unknown as { copied: string }).copied,
+  );
+  expect(copied).toContain(reading.title);
+  expect(copied).toContain("宜：整理一角桌面");
+  expect(copied).toContain("忌：急于给出结论");
+  const [image] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "保存图片（PNG）" }).click(),
+  ]);
+  const file = readFileSync((await image.path())!);
+  expect(file.readUInt32BE(20)).toBeGreaterThan(1000);
+  await image.saveAs("test-results/reading.png");
+  await page.getByRole("button", { name: "关闭分享面板" }).click();
+  await context.route("**/api/draws/" + id, (route) =>
+    route.fulfill({ json: ready }),
+  );
+  const recipient = await context.newPage();
+  await recipient.goto(url);
+  await expect(
+    recipient.getByRole("heading", { name: reading.title }),
+  ).toBeVisible();
+  expect(calls).toBe(1);
+  await recipient.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await recipient.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await recipient.screenshot({
+    path: "test-results/reading-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await recipient.close();
+});
+
+test("unconfigured interpretation is retryable and changing draw ignores an old request", async ({
+  page,
+}) => {
+  await page.goto("/" + fragment([525]));
+  await page.getByRole("button", { name: "释读此签", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("尚未配置 DeepSeek");
+  await expect(
+    page.getByRole("button", { name: "重试释读", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".revealed")).toHaveCount(1);
+  const id = new URL(page.url()).hash.slice("#draw=".length);
+  const original = await (await page.request.get("/api/draws/" + id)).json();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/draws/" + id + "/interpret", async (route) => {
+    await gate;
+    try {
+      await route.fulfill({
+        json: {
+          ...original,
+          readingStatus: "ready",
+          reading: {
+            title: "旧签不能覆盖新签",
+            interpretation: "旧签释读",
+            dos: ["旧的建议"],
+            donts: ["旧的提醒"],
+          },
+        },
+      });
+    } catch {
+      /* request was cancelled */
+    }
+  });
+  await page.getByRole("button", { name: "重试释读", exact: true }).click();
+  await expect(page.getByRole("button", { name: "正在释读…" })).toBeDisabled();
+  await page.getByRole("button", { name: "再抽一次" }).click();
+  await expect(
+    page.getByRole("button", { name: "释读此签", exact: true }),
+  ).toBeVisible();
+  expect(new URL(page.url()).hash).not.toBe("#draw=" + id);
+  release();
+  await expect(
+    page.getByRole("heading", { name: "旧签不能覆盖新签" }),
+  ).toHaveCount(0);
+  await expect(page.locator(".reading-section")).toHaveCount(0);
+});
+
+test("opening an in-progress saved draw polls its result without calling interpretation", async ({
+  page,
+}) => {
+  await page.goto("/" + fragment([525]));
+  await expect(page.locator(".revealed")).toHaveCount(1);
+  const id = new URL(page.url()).hash.slice("#draw=".length);
+  const original = await (await page.request.get("/api/draws/" + id)).json();
+  let reads = 0,
+    posts = 0,
+    complete = false;
+  await page.route("**/api/draws/" + id + "/interpret", (route) => {
+    posts++;
+    return route.abort();
+  });
+  await page.route("**/api/draws/" + id, (route) => {
+    reads++;
+    return route.fulfill({
+      json: !complete
+        ? { ...original, readingStatus: "pending" }
+        : {
+            ...original,
+            readingStatus: "ready",
+            reading: {
+              title: "分享中的同一束光",
+              interpretation: "保存的释读内容",
+              dos: ["整理桌面", "记录灵感", "慢慢行动"],
+              donts: ["急于结论", "反复纠结", "忽略当下"],
+            },
+          },
+    });
+  });
+  await page.reload();
+  await expect(page.getByRole("button", { name: "正在释读…" })).toBeDisabled();
+  complete = true;
+  await expect(
+    page.getByRole("heading", { name: "分享中的同一束光" }),
+  ).toBeVisible();
+  expect(posts).toBe(0);
+  expect(reads).toBeGreaterThanOrEqual(2);
 });

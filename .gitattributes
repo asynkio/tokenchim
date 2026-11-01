@@ -1,0 +1,2 @@
+# Preserve the exact bytes of the pinned official tokenizer on every platform.
+vendor/tokenizer.json -text

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { tokenParts, type Token } from "./core";
 import { colors } from "./export";
 
@@ -10,28 +10,43 @@ export function TokenCard({
   index: number;
 }) {
   const [flipped, setFlipped] = useState(false);
+  const [turning, setTurning] = useState(false);
+  useEffect(() => {
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const change = () => {
+      if (media.matches) setTurning(false);
+    };
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
+  function toggle() {
+    if (turning) return;
+    setTurning(!matchMedia("(prefers-reduced-motion: reduce)").matches);
+    setFlipped((value) => !value);
+  }
   const detailsId = `token-details-${t.id}`;
   return (
     <article
-      className={`card revealed${flipped ? " is-flipped" : ""}`}
+      className={`card revealed${flipped ? " is-flipped" : ""}${turning ? " is-turning" : ""}`}
       role="button"
       tabIndex={0}
       aria-label={`词元 #${t.id}，${flipped ? "点击返回词元" : "点击翻面查看详情"}`}
       aria-pressed={flipped}
       aria-describedby={flipped ? `${detailsId} flip-hint` : "flip-hint"}
       onClick={() => {
-        if (!window.getSelection()?.toString()) setFlipped((value) => !value);
+        if (!window.getSelection()?.toString()) toggle();
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
+          setTurning(false);
           setFlipped(false);
         } else if (
           e.target === e.currentTarget &&
           (e.key === "Enter" || e.key === " ")
         ) {
           e.preventDefault();
-          setFlipped((value) => !value);
+          toggle();
         }
       }}
       style={
@@ -41,7 +56,12 @@ export function TokenCard({
         } as React.CSSProperties
       }
     >
-      <div className="card-flipper">
+      <div
+        className="card-flipper"
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) setTurning(false);
+        }}
+      >
         <div
           className="card-face card-front"
           aria-hidden={flipped}

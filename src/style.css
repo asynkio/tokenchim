@@ -544,7 +544,7 @@ footer small {
     ),
     #141622;
   padding: 20px;
-  animation: reveal 0.65s both;
+  animation: reveal 0.65s backwards;
   animation-delay: var(--delay);
 }
 .card-top {
@@ -919,13 +919,32 @@ footer small {
   display: grid;
   flex: 1;
   min-width: 0;
-  transform-style: preserve-3d;
   border-radius: 12px;
-  transition: transform 0.5s cubic-bezier(0.2, 0.65, 0.25, 1);
 }
-.is-flipped .card-flipper {
-  transform: rotateY(180deg);
+.is-turning .card-flipper {
+  transform-style: preserve-3d;
+  animation: turn-back 0.5s cubic-bezier(0.2, 0.65, 0.25, 1);
 }
+.is-turning.is-flipped .card-flipper {
+  animation-name: turn-forward;
+}
+@keyframes turn-forward {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
+}
+@keyframes turn-back {
+  from {
+    transform: rotateY(180deg);
+  }
+  to {
+    transform: rotateY(0deg);
+  }
+}
+
 .card-face {
   grid-area: 1 / 1;
   min-width: 0;
@@ -941,15 +960,28 @@ footer small {
       transparent 80%
     ),
     #141622;
+}
+.card-back {
+  visibility: hidden;
+}
+.is-flipped .card-front {
+  visibility: hidden;
+}
+.is-flipped .card-back {
+  visibility: visible;
+}
+.is-turning .card-face {
+  visibility: visible;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
-.card-back {
+.is-turning .card-back {
   transform: rotateY(180deg);
 }
-.card-front {
+.is-turning .card-front {
   transform: rotateY(0deg);
 }
+
 .is-flipped .card-front,
 .revealed:not(.is-flipped) .card-back {
   pointer-events: none;
@@ -1243,5 +1275,105 @@ footer small {
 @keyframes share-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+.interpret-control {
+  text-align: center;
+  margin: 22px 0 0;
+}
+.interpret-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  background: transparent;
+  border-color: #4a385f;
+  color: #c3a4ec;
+  font-size: 12px;
+}
+.reading-section {
+  border-top: 1px solid #3c304b;
+  margin-top: 28px;
+  padding: 26px 12px 4px;
+}
+.reading-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b596d8;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.reading-section h2 {
+  font-size: 24px;
+  font-weight: 500;
+  margin: 14px 0;
+  color: #e4d4fa;
+}
+.reading-prose {
+  font-size: 14px;
+  color: #bcb3cb;
+  line-height: 2;
+  max-width: 850px;
+}
+.reading-advice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 22px;
+}
+.reading-advice > div {
+  padding: 15px 18px;
+  border: 1px solid #ffffff0d;
+  border-radius: 8px;
+  background: #ffffff02;
+}
+.reading-advice h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+.reading-dos h3 {
+  color: #9ce4bd;
+}
+.reading-donts h3 {
+  color: #edbdc3;
+}
+.reading-advice ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #b1a6bf;
+  line-height: 2;
+}
+.reading-error {
+  color: #e6b2bc;
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+.reading-footnote {
+  color: #82748f;
+  font-size: 10px;
+  margin: 18px 0 0;
+}
+@media (max-width: 480px) {
+  .reading-section {
+    padding-inline: 0;
+  }
+  .reading-advice {
+    gap: 10px;
+  }
+  .reading-advice > div {
+    padding: 12px;
+  }
+  .reading-section h2 {
+    font-size: 21px;
+  }
+  .reading-prose {
+    font-size: 13px;
   }
 }

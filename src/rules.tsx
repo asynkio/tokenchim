@@ -164,6 +164,16 @@ function RulesPage() {
               </>
             )}
           </details>
+          <div className="info-grid">
+            <div>
+              <span className="info-number">04 / 释读</span>
+              <h3>留一点空间，给想象</h3>
+              <p>
+                抽签与评级由程序完成。点击「释读此签」后，DeepSeek
+                才会结合整组词元生成释读及宜忌，仅作趣味灵感。释读成功后随签单保存，分享者与接收者看到同一份结果。
+              </p>
+            </div>
+          </div>
           <p className="display-note">
             显示约定：<code>·</code> 空格、<code>↵</code> 换行、<code>⇥</code>{" "}
             制表符、<code>␍</code> 回车；控制字符和不完整 UTF-8

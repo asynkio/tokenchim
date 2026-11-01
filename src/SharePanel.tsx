@@ -9,20 +9,24 @@ import {
   Ellipsis,
 } from "lucide-react";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { encodeShare, type Token } from "./core";
+import type { Token } from "./core";
+import type { DrawRecord, Reading } from "./contracts";
+import { drawLink } from "./api";
 import { formatResultText } from "./share";
 import { exportPng, download } from "./export";
 interface Snapshot {
   tokens: Token[];
   url: string;
+  reading: Reading | null;
 }
 export function SharePanel({
-  tokens,
+  record,
   disabled,
 }: {
-  tokens: Token[];
+  record: DrawRecord;
   disabled: boolean;
 }) {
+  const tokens = record.tokens;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [feedback, setFeedback] = useState("");
   const [copiedTarget, setCopiedTarget] = useState<"link" | "text" | null>(
@@ -43,7 +47,7 @@ export function SharePanel({
   }
   useEffect(() => {
     close();
-  }, [tokens]);
+  }, [record.id, record.reading]);
   useEffect(() => {
     addEventListener("hashchange", close);
     return () => removeEventListener("hashchange", close);
@@ -117,12 +121,11 @@ export function SharePanel({
     }
   }
   function open() {
-    const url =
-      location.href.split("#")[0] + encodeShare(tokens.map((t) => t.id));
+    const url = drawLink(record);
     session.current++;
     setManualText("");
     setExporting(false);
-    setSnapshot({ tokens: [...tokens], url });
+    setSnapshot({ tokens: [...tokens], url, reading: record.reading });
     // Start within the click gesture, never in a mount effect.
     void copy(url, "link", true);
   }
@@ -133,7 +136,7 @@ export function SharePanel({
     setExporting(true);
     setFeedback("");
     try {
-      const blob = await exportPng(snapshot.tokens);
+      const blob = await exportPng(snapshot.tokens, snapshot.reading);
       if (currentSession === session.current) {
         download(blob);
       }
@@ -276,7 +279,11 @@ export function SharePanel({
                 aria-live="polite"
                 onClick={() =>
                   void copy(
-                    formatResultText(snapshot.tokens, snapshot.url),
+                    formatResultText(
+                      snapshot.tokens,
+                      snapshot.url,
+                      snapshot.reading,
+                    ),
                     "text",
                   )
                 }

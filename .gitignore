@@ -5,3 +5,11 @@ dist/
 playwright-report/
 test-results/
 *.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+var/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
