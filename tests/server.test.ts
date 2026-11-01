@@ -50,7 +50,7 @@ function setup(
 test("server draw counts, immutable official snapshots and legacy ordered import", () => {
   const { store, service } = setup();
   try {
-    for (let count = 1; count <= 10; count++) {
+    for (let count = 1; count <= 4; count++) {
       const r = service.draw(count);
       assert.equal(r.tokens.length, count);
       assert.equal(new Set(r.ids).size, count);
@@ -61,7 +61,7 @@ test("server draw counts, immutable official snapshots and legacy ordered import
           data.tokens.find((x) => x.id === t.id),
         );
     }
-    for (const n of [0, 11, 1.5, "3", null])
+    for (const n of [0, 5, 10, 11, 1.5, "3", null])
       assert.throws(() => service.draw(n), ApiError);
     const input = {
       version: data.version,

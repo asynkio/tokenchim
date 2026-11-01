@@ -120,14 +120,14 @@ test("sampling rejects modulo bias, returns correct counts and supports repeated
     9,
   );
   assert.equal(calls, 2);
-  for (let n = 1; n <= 10; n++)
+  for (let n = 1; n <= 4; n++)
     for (let i = 0; i < 20; i++) {
       const result = draw(tokens, n);
       assert.equal(result.length, n);
       assert.equal(new Set(result.map((t) => t.id)).size, n);
     }
   assert.throws(() => draw(tokens, 0));
-  assert.throws(() => draw(tokens, 11));
+  assert.throws(() => draw(tokens, 5));
   assert.throws(() => draw(tokens, 2.5));
 });
 test("share preserves order and validates incompatible, repeated, absent and malformed IDs", () => {

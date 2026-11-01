@@ -6,7 +6,35 @@ const data: Dataset = JSON.parse(
 );
 const fragment = (ids: number[]) =>
   "#v=ds-v3.2-a7e62ac&r=rank-v1&ids=" + ids.join(",");
-test("desktop empty state, draw lock, ten cards, copy fallback, PNG and ordered restore", async ({
+for (const width of [1280, 600, 390]) {
+  for (const count of [1, 2]) {
+    test(`${count} cards are centered at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.goto("/");
+      await expect(page.getByRole("combobox").locator("option")).toHaveText([
+        "1 个词元",
+        "2 个词元",
+        "3 个词元",
+        "4 个词元",
+      ]);
+      await page.getByRole("combobox").selectOption(String(count));
+      await page.getByRole("button", { name: "开启我的词元奇遇" }).click();
+      await expect(page.locator(".revealed")).toHaveCount(count);
+      const bounds = await page.locator(".revealed").evaluateAll((cards) => {
+        const rects = cards.map((card) => card.getBoundingClientRect());
+        return {
+          left: Math.min(...rects.map((r) => r.left)),
+          right: Math.max(...rects.map((r) => r.right)),
+        };
+      });
+      expect(
+        Math.abs((bounds.left + bounds.right) / 2 - width / 2),
+      ).toBeLessThan(2);
+    });
+  }
+}
+test("desktop empty state, draw lock, four cards, copy fallback, PNG and ordered restore", async ({
   page,
 }) => {
   await page.goto("/");
@@ -23,12 +51,12 @@ test("desktop empty state, draw lock, ten cards, copy fallback, PNG and ordered 
     await new Promise((resolve) => setTimeout(resolve, 150));
     await route.continue();
   });
-  await page.getByRole("combobox").selectOption("10");
+  await page.getByRole("combobox").selectOption("4");
   await page.getByRole("button", { name: "开启我的词元奇遇" }).click();
   await expect(page.getByRole("button", { name: "正在召唤…" })).toBeDisabled();
-  await expect(page.locator(".revealed")).toHaveCount(10);
+  await expect(page.locator(".revealed")).toHaveCount(4);
   const ids = await page.locator(".token-id").allTextContents();
-  expect(new Set(ids).size).toBe(10);
+  expect(new Set(ids).size).toBe(4);
   await page.evaluate(() =>
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: () => Promise.reject(new Error("unavailable")) },
@@ -42,7 +70,7 @@ test("desktop empty state, draw lock, ten cards, copy fallback, PNG and ordered 
   await page.getByRole("button", { name: "关闭分享面板" }).click();
   await page.goto(url);
   await page.reload();
-  await expect(page.locator(".revealed")).toHaveCount(10);
+  await expect(page.locator(".revealed")).toHaveCount(4);
   expect(await page.locator(".token-id").allTextContents()).toEqual(ids);
   await page.getByRole("button", { name: "分享", exact: true }).click();
   const [download] = await Promise.all([
@@ -384,6 +412,7 @@ test("centered summon, desktop popover, mobile drawer and clipboard fallbacks", 
   const trigger = page.getByRole("button", { name: "分享", exact: true });
   for (const width of [1280, 800, 760, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
     const [summon, controls, share] = await Promise.all([
       page.locator(".summon").boundingBox(),
       page.locator(".controls").boundingBox(),

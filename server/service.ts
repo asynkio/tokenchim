@@ -61,9 +61,9 @@ export class DrawService {
       typeof count !== "number" ||
       !Number.isInteger(count) ||
       count < 1 ||
-      count > 10
+      count > 4
     )
-      throw new ApiError(400, "抽取数量应为 1–10 的整数", "INVALID_COUNT");
+      throw new ApiError(400, "抽取数量应为 1–4 的整数", "INVALID_COUNT");
     return this.create(draw(this.data.tokens, count), "random");
   }
   import(input: { version?: unknown; ratingVersion?: unknown; ids?: unknown }) {

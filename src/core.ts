@@ -132,10 +132,10 @@ export function draw(tokens: Token[], count: number) {
   if (
     !Number.isInteger(count) ||
     count < 1 ||
-    count > 10 ||
+    count > 4 ||
     count > tokens.length
   )
-    throw Error("抽取数量应为 1–10");
+    throw Error("抽取数量应为 1–4");
   const picked = new Set<number>();
   while (picked.size < count) picked.add(randomBelow(tokens.length));
   return [...picked].map((i) => tokens[i]);

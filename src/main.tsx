@@ -230,7 +230,7 @@ function App() {
                 disabled={busy}
                 onChange={(e) => setCount(Number(e.target.value))}
               >
-                {Array.from({ length: 10 }, (_, i) => (
+                {Array.from({ length: 4 }, (_, i) => (
                   <option key={i} value={i + 1}>
                     {i + 1} 个词元
                   </option>
