@@ -12,7 +12,19 @@ export async function api<T>(
     signal,
   });
   const value = await response.json();
-  if (!response.ok) throw Error(value.error?.message ?? "请求失败，请重试");
+  if (!response.ok) {
+    const message = value.error?.message ?? "请求失败，请重试";
+    const retryAfter = response.headers.get("Retry-After");
+    const seconds =
+      retryAfter && /^\d+$/.test(retryAfter) ? Number(retryAfter) : 0;
+    throw Error(
+      response.status === 429 &&
+        seconds > 0 &&
+        value.error?.code !== "DAILY_READING_LIMIT"
+        ? `${message}（请在 ${seconds} 秒后重试）`
+        : message,
+    );
+  }
   return value as T;
 }
 export const health = () => api<Health>("health");

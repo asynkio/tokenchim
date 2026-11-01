@@ -727,3 +727,69 @@ test("opening an in-progress saved draw polls its result without calling interpr
   expect(posts).toBe(0);
   expect(reads).toBeGreaterThanOrEqual(2);
 });
+
+test("draw rate limits show Retry-After and require an explicit retry", async ({
+  page,
+}) => {
+  await page.goto("/");
+  let calls = 0;
+  await page.route("**/api/draws", async (route) => {
+    calls++;
+    if (calls === 1)
+      await route.fulfill({
+        status: 429,
+        headers: { "Retry-After": "1" },
+        json: {
+          error: {
+            code: "DRAW_RATE_LIMIT",
+            message: "抽签请求过于频繁，请稍后重试",
+          },
+        },
+      });
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "开启我的词元奇遇" }).click();
+  await expect(page.getByRole("alert")).toContainText("请在 1 秒后重试");
+  await page.waitForTimeout(1200);
+  expect(calls).toBe(1);
+  await page.getByRole("button", { name: "开启我的词元奇遇" }).click();
+  await expect(page.locator(".revealed")).toHaveCount(3);
+  expect(calls).toBe(2);
+});
+
+for (const code of ["RATE_LIMIT", "DAILY_READING_LIMIT"]) {
+  test(`${code} displays a useful interpretation message without retrying automatically`, async ({
+    page,
+  }) => {
+    await page.goto("/" + fragment([223, 525]));
+    let calls = 0;
+    await page.route("**/api/draws/*/interpret", async (route) => {
+      calls++;
+      await route.fulfill({
+        status: 429,
+        headers: { "Retry-After": code === "RATE_LIMIT" ? "1" : "86400" },
+        json: {
+          error: {
+            code,
+            message:
+              code === "RATE_LIMIT"
+                ? "释读请求过于频繁，请稍后重试"
+                : "今日释读额度已用完",
+          },
+        },
+      });
+    });
+    await page.getByRole("button", { name: "释读此签", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+      code === "RATE_LIMIT"
+        ? "释读请求过于频繁，请稍后重试（请在 1 秒后重试）"
+        : "今日释读额度已用完",
+    );
+    await expect(page.getByRole("button", { name: "重试释读" })).toBeEnabled();
+    await page.waitForTimeout(1200);
+    expect(calls).toBe(1);
+    await page.getByRole("button", { name: "重试释读" }).click();
+    await expect.poll(() => calls).toBe(2);
+    await expect(page.getByRole("button", { name: "重试释读" })).toBeEnabled();
+  });
+}

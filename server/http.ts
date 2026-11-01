@@ -5,6 +5,8 @@ import {
 } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
+import { clientIp } from "./client-ip.ts";
+import { MinuteLimit } from "./limits.ts";
 import { ApiError } from "./errors.ts";
 import type { DrawService } from "./service.ts";
 async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -48,10 +50,22 @@ const MIME: Record<string, string> = {
 };
 export function createApp(
   service: DrawService,
-  options: { staticDir?: string; basePath?: string } = {},
+  options: {
+    staticDir?: string;
+    basePath?: string;
+    trustedProxyIps?: ReadonlySet<string>;
+    apiRateLimit?: number;
+    now?: () => number;
+  } = {},
 ) {
   const root = resolve(options.staticDir ?? "dist");
   const base = (options.basePath ?? "/").replace(/\/$/, "") + "/";
+  const trustedProxyIps = options.trustedProxyIps ?? new Set<string>();
+  const requests = new MinuteLimit(
+    options.apiRateLimit ?? 120,
+    "API_RATE_LIMIT",
+    "请求过于频繁，请稍后重试",
+  );
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -59,6 +73,13 @@ export function createApp(
         throw new ApiError(404, "页面不存在", "NOT_FOUND");
       const path = url.pathname.slice(base.length - 1);
       if (path.startsWith("/api/")) {
+        const ip = clientIp(
+          req.socket.remoteAddress,
+          req.headers["x-forwarded-for"],
+          trustedProxyIps,
+        );
+        if (!(req.method === "GET" && path === "/api/health"))
+          requests.consume(ip, (options.now ?? Date.now)());
         const origin = req.headers.origin;
         if (origin && new URL(origin).host !== req.headers.host)
           throw new ApiError(403, "不允许此来源的请求", "INVALID_ORIGIN");
@@ -70,11 +91,11 @@ export function createApp(
           return;
         }
         if (req.method === "POST" && path === "/api/draws") {
-          json(res, 201, service.draw((await body(req)).count));
+          json(res, 201, service.draw((await body(req)).count, ip));
           return;
         }
         if (req.method === "POST" && path === "/api/draws/import") {
-          json(res, 200, service.import(await body(req)));
+          json(res, 200, service.import(await body(req), ip));
           return;
         }
         const match = path.match(
@@ -85,10 +106,7 @@ export function createApp(
           return;
         }
         if (match && req.method === "POST" && match[2]) {
-          const record = await service.interpret(
-            match[1],
-            req.socket.remoteAddress ?? "local",
-          );
+          const record = await service.interpret(match[1], ip);
           json(res, 200, record);
           return;
         }

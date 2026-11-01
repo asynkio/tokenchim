@@ -11,15 +11,19 @@ import type { DrawRecord } from "../src/contracts.ts";
 import { legacyV3 } from "./legacy-v3.ts";
 import { Store } from "./store.ts";
 import { generateReading, type ProviderOptions } from "./deepseek.ts";
+import { MinuteLimit } from "./limits.ts";
 import { ApiError } from "./errors.ts";
 export interface ServiceOptions extends ProviderOptions {
   rateLimit?: number;
   concurrency?: number;
+  drawRateLimit?: number;
+  dailyLimit?: number;
   now?: () => number;
 }
 export class DrawService {
   private tasks = new Map<string, Promise<DrawRecord>>();
-  private rates = new Map<string, { count: number; reset: number }>();
+  private readingLimit: MinuteLimit;
+  private drawLimit: MinuteLimit;
   constructor(
     public store: Store,
     private data: Dataset,
@@ -32,6 +36,16 @@ export class DrawService {
       new Set(data.tokens.map((t) => t.id)).size !== 129280
     )
       throw Error("Offline vocabulary validation failed");
+    this.readingLimit = new MinuteLimit(
+      options.rateLimit ?? 6,
+      "RATE_LIMIT",
+      "释读请求过于频繁，请稍后重试",
+    );
+    this.drawLimit = new MinuteLimit(
+      options.drawRateLimit ?? 20,
+      "DRAW_RATE_LIMIT",
+      "抽签请求过于频繁，请稍后重试",
+    );
   }
   get configured() {
     return !!this.options.apiKey;
@@ -62,7 +76,7 @@ export class DrawService {
     this.store.insert(record, key);
     return record;
   }
-  draw(count: unknown) {
+  draw(count: unknown, ip = "local") {
     if (
       typeof count !== "number" ||
       !Number.isInteger(count) ||
@@ -70,9 +84,16 @@ export class DrawService {
       count > 4
     )
       throw new ApiError(400, "抽取数量应为 1–4 的整数", "INVALID_COUNT");
-    return this.create(draw(this.data.tokens, count), "random");
+    const now = (this.options.now ?? Date.now)();
+    this.drawLimit.check(ip, now);
+    const record = this.create(draw(this.data.tokens, count), "random");
+    this.drawLimit.consume(ip, now);
+    return record;
   }
-  import(input: { version?: unknown; ratingVersion?: unknown; ids?: unknown }) {
+  import(
+    input: { version?: unknown; ratingVersion?: unknown; ids?: unknown },
+    ip = "local",
+  ) {
     if (
       typeof input.version !== "string" ||
       typeof input.ratingVersion !== "string" ||
@@ -105,10 +126,13 @@ export class DrawService {
       throw new ApiError(400, (e as Error).message, "INVALID_SHARE");
     }
     const key = p.toString();
-    return (
-      this.store.imported(key) ??
-      this.create(tokens, "legacy", key, input.version)
-    );
+    const existing = this.store.imported(key);
+    if (existing) return existing;
+    const now = (this.options.now ?? Date.now)();
+    this.drawLimit.check(ip, now);
+    const record = this.create(tokens, "legacy", key, input.version);
+    this.drawLimit.consume(ip, now);
+    return record;
   }
   interpret(id: string, ip: string): Promise<DrawRecord> {
     const record = this.get(id);
@@ -122,26 +146,16 @@ export class DrawService {
         "NOT_CONFIGURED",
       );
     const now = (this.options.now ?? Date.now)();
-    for (const [key, value] of this.rates)
-      if (value.reset <= now) this.rates.delete(key);
     if (this.tasks.size >= (this.options.concurrency ?? 2))
       throw new ApiError(429, "当前释读较多，请稍后重试", "BUSY", 2);
-    const rate = this.rates.get(ip) ?? { count: 0, reset: now + 60000 };
-    if (rate.count >= (this.options.rateLimit ?? 6))
-      throw new ApiError(
-        429,
-        "释读请求过于频繁，请稍后重试",
-        "RATE_LIMIT",
-        Math.ceil((rate.reset - now) / 1000),
-      );
-    rate.count++;
-    this.rates.set(ip, rate);
+    this.readingLimit.check(ip, now);
     const pending = {
       ...record,
       readingStatus: "pending" as const,
       readingError: null,
     };
-    this.store.update(pending);
+    this.store.reserveReading(pending, now, this.options.dailyLimit ?? 500);
+    this.readingLimit.consume(ip, now);
     const promise = (async () => {
       try {
         const reading = await generateReading(record, this.options);

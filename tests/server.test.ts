@@ -3,6 +3,10 @@ import {
   buildInterpretationInput,
 } from "../server/token-input.ts";
 import { test } from "node:test";
+import { DatabaseSync } from "node:sqlite";
+import { MinuteLimit } from "../server/limits.ts";
+import { clientIp, normalizeIp } from "../server/client-ip.ts";
+import { readLimits } from "../server/config.ts";
 import assert from "node:assert/strict";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -278,6 +282,7 @@ test("rate limit and global concurrency apply only to new generation work", asyn
     model: "test",
     apiKey: "key",
     rateLimit: 1,
+    dailyLimit: 3,
     concurrency: 2,
     now: () => now,
     fetcher: async () => {
@@ -592,5 +597,324 @@ test("every ordinary token is lossless in the model input decoder", () => {
         assert.ok(segments.some((p) => p.kind === "bytes"));
       else throw error;
     }
+  }
+});
+
+test("IP normalization and explicit proxy trust prevent spoofing and alternate address bypasses", () => {
+  const trusted = readLimits({
+    TRUSTED_PROXY_IPS: "127.0.0.1,::1",
+  }).trustedProxyIps;
+  assert.equal(
+    normalizeIp("2001:0DB8:0000:0000:0000:0000:0000:0001"),
+    "2001:db8::1",
+  );
+  assert.equal(normalizeIp("::ffff:c000:201"), "192.0.2.1");
+  assert.equal(normalizeIp("::ffff:192.0.2.1"), "192.0.2.1");
+  assert.equal(
+    clientIp("::ffff:127.0.0.1", "2001:0db8::1", trusted),
+    "2001:db8::1",
+  );
+  assert.equal(clientIp("192.0.2.2", "198.51.100.1", trusted), "192.0.2.2");
+  for (const value of [
+    undefined,
+    "",
+    "garbage",
+    "192.0.2.1, 198.51.100.1",
+    ["192.0.2.1", "198.51.100.1"],
+    "192.0.2.1:80",
+  ])
+    assert.equal(clientIp("127.0.0.1", value, trusted), "127.0.0.1");
+  assert.equal(clientIp("127.0.0.1", "192.0.2.1", new Set()), "127.0.0.1");
+});
+
+test("limit configuration has safe defaults and rejects invalid values", () => {
+  assert.deepEqual(readLimits({}), {
+    trustedProxyIps: new Set(),
+    apiRateLimit: 120,
+    drawRateLimit: 20,
+    rateLimit: 6,
+    concurrency: 2,
+    dailyLimit: 500,
+  });
+  assert.equal(readLimits({ READING_DAILY_LIMIT: "0" }).dailyLimit, 0);
+  for (const key of [
+    "API_RATE_LIMIT_PER_MINUTE",
+    "DRAW_RATE_LIMIT_PER_MINUTE",
+    "READING_RATE_LIMIT_PER_MINUTE",
+    "READING_CONCURRENCY",
+    "READING_DAILY_LIMIT",
+  ])
+    for (const value of [
+      "",
+      "-1",
+      "1.2",
+      "Infinity",
+      "9007199254740992",
+      " 2",
+      "1e2",
+    ])
+      assert.throws(() => readLimits({ [key]: value }), new RegExp(key));
+  assert.throws(() => readLimits({ READING_CONCURRENCY: "0" }));
+  for (const value of ["*", "127.0.0.0/8", "127.0.0.1,", "localhost"])
+    assert.throws(() => readLimits({ TRUSTED_PROXY_IPS: value }));
+});
+
+test("minute limits recover at the boundary and never evict active IPs at capacity", () => {
+  const limit = new MinuteLimit(2, "TEST_LIMIT", "slow down", 2);
+  limit.consume("a", 100);
+  limit.consume("a", 101);
+  limit.consume("b", 200);
+  assert.throws(
+    () => limit.consume("a", 1101),
+    (e: unknown) => e instanceof ApiError && e.retryAfter === 59,
+  );
+  assert.throws(() => limit.consume("c", 1101), ApiError);
+  assert.throws(() => limit.consume("a", 1102), ApiError);
+  limit.consume("a", 60100);
+  limit.consume("c", 60200);
+  limit.consume("c", 60201);
+  assert.throws(() => limit.consume("c", 60202), ApiError);
+});
+
+test("draw and first import share a quota; existing imports and reads remain available", () => {
+  let now = 100;
+  const { store, service } = setup({
+    model: "mock",
+    drawRateLimit: 2,
+    now: () => now,
+  });
+  const input = {
+    version: data.version,
+    ratingVersion: data.rating,
+    ids: [525],
+  };
+  try {
+    const a = service.draw(1, "visitor");
+    const b = service.import(input, "visitor");
+    assert.throws(
+      () => service.draw(1, "visitor"),
+      (e: unknown) =>
+        e instanceof ApiError &&
+        e.code === "DRAW_RATE_LIMIT" &&
+        e.retryAfter === 60,
+    );
+    assert.equal(service.import(input, "visitor").id, b.id);
+    assert.deepEqual(service.get(a.id), a);
+    assert.throws(
+      () => service.import({ ...input, ids: [223] }, "visitor"),
+      ApiError,
+    );
+    assert.equal(service.draw(1, "other").tokens.length, 1);
+    now = 60100;
+    assert.equal(service.draw(1, "visitor").tokens.length, 1);
+  } finally {
+    store.close();
+  }
+});
+
+test("daily reservations survive restart, count failures, preserve old databases and reset at Beijing midnight", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "tokenchim-daily-"));
+  const path = join(dir, "old.sqlite");
+  const original = setup();
+  const saved = original.service.draw(1);
+  original.store.close();
+  const oldDb = new DatabaseSync(path);
+  oldDb.exec(
+    "CREATE TABLE draws (id TEXT PRIMARY KEY, import_key TEXT UNIQUE, payload TEXT NOT NULL); PRAGMA user_version=1;",
+  );
+  oldDb
+    .prepare("INSERT INTO draws(id,payload) VALUES (?,?)")
+    .run(saved.id, JSON.stringify(saved));
+  oldDb.close();
+  let now = Date.parse("2026-11-01T15:59:59.000Z"),
+    calls = 0;
+  let store = new Store(path);
+  const options = {
+    model: "mock",
+    apiKey: "key",
+    dailyLimit: 1,
+    now: () => now,
+    fetcher: async () => {
+      calls++;
+      return response();
+    },
+  };
+  try {
+    let service = new DrawService(store, data, options);
+    assert.deepEqual(service.get(saved.id), saved);
+    const ready = await service.interpret(saved.id, "a");
+    const next = service.draw(1);
+    assert.throws(
+      () => service.interpret(next.id, "b"),
+      (e: unknown) =>
+        e instanceof ApiError &&
+        e.code === "DAILY_READING_LIMIT" &&
+        e.retryAfter === 1,
+    );
+    assert.equal(service.get(next.id).readingStatus, "idle");
+    store.close();
+    store = new Store(path);
+    service = new DrawService(store, data, options);
+    assert.throws(() => service.interpret(next.id, "c"), ApiError);
+    assert.deepEqual(await service.interpret(saved.id, "c"), ready);
+    const paused = new DrawService(store, data, { ...options, dailyLimit: 0 });
+    assert.deepEqual(await paused.interpret(saved.id, "c"), ready);
+    assert.throws(() => paused.interpret(next.id, "c"), ApiError);
+    now += 1000;
+    service = new DrawService(store, data, {
+      ...options,
+      fetcher: async () => {
+        calls++;
+        return new Response("failed", { status: 500 });
+      },
+    });
+    await assert.rejects(service.interpret(next.id, "d"));
+    assert.equal(service.get(next.id).readingStatus, "failed");
+    assert.throws(
+      () => service.interpret(next.id, "e"),
+      (e: unknown) =>
+        e instanceof ApiError &&
+        e.code === "DAILY_READING_LIMIT" &&
+        e.retryAfter === 86400,
+    );
+    assert.equal(calls, 2);
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("daily quota reuses in-flight work and transaction failure rolls back before any model call", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "tokenchim-atomic-"));
+  const path = join(dir, "test.sqlite");
+  const store = new Store(path);
+  const db = new DatabaseSync(path);
+  let calls = 0,
+    release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const service = new DrawService(store, data, {
+    model: "mock",
+    apiKey: "key",
+    dailyLimit: 1,
+    fetcher: async () => {
+      calls++;
+      await gate;
+      return response();
+    },
+  });
+  try {
+    const a = service.draw(1),
+      b = service.draw(1);
+    db.exec(
+      "CREATE TRIGGER reject_pending BEFORE UPDATE ON draws BEGIN SELECT RAISE(ABORT, 'test write failure'); END;",
+    );
+    assert.throws(() => service.interpret(a.id, "a"), /test write failure/);
+    assert.equal(calls, 0);
+    assert.equal(service.get(a.id).readingStatus, "idle");
+    db.exec("DROP TRIGGER reject_pending;");
+    const first = service.interpret(a.id, "a");
+    assert.equal(service.interpret(a.id, "other"), first);
+    assert.throws(
+      () => service.interpret(b.id, "b"),
+      (e: unknown) => e instanceof ApiError && e.code === "DAILY_READING_LIMIT",
+    );
+    release();
+    await first;
+    assert.equal(calls, 1);
+  } finally {
+    release();
+    await service.drain();
+    db.close();
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+for (const trust of [false, true]) {
+  test(`HTTP request guard counts failures, honors proxy trust=${trust} and preserves health checks`, async () => {
+    const { store, service } = setup();
+    let now = 0;
+    const app = createApp(service, {
+      apiRateLimit: 2,
+      trustedProxyIps: new Set(trust ? ["127.0.0.1"] : []),
+      now: () => now,
+    });
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    const base = "http://127.0.0.1:" + (app.address() as AddressInfo).port;
+    const request = (ip: string, path = "/api/missing") =>
+      fetch(base + path, { headers: { "X-Forwarded-For": ip } });
+    try {
+      assert.equal((await request("192.0.2.1")).status, 404);
+      assert.equal((await request("192.0.2.1")).status, 404);
+      const rejected = await request("192.0.2.1");
+      assert.equal(rejected.status, 429);
+      assert.equal(rejected.headers.get("Retry-After"), "60");
+      assert.equal((await rejected.json()).error.code, "API_RATE_LIMIT");
+      assert.equal((await request("192.0.2.2")).status, trust ? 404 : 429);
+      assert.equal((await request("192.0.2.1", "/api/health")).status, 200);
+      now = 60000;
+      assert.equal((await request("192.0.2.1")).status, 404);
+    } finally {
+      await new Promise<void>((resolve) => app.close(() => resolve()));
+      store.close();
+    }
+  });
+}
+
+test("HTTP draw and interpretation routes use the same trusted client identity", async () => {
+  let calls = 0;
+  const { store, service } = setup({
+    model: "mock",
+    apiKey: "key",
+    drawRateLimit: 1,
+    rateLimit: 1,
+    fetcher: async () => {
+      calls++;
+      return response();
+    },
+  });
+  const app = createApp(service, { trustedProxyIps: new Set(["127.0.0.1"]) });
+  app.listen(0, "127.0.0.1");
+  await once(app, "listening");
+  const base = "http://127.0.0.1:" + (app.address() as AddressInfo).port;
+  const post = (ip: string, path: string, body: unknown) =>
+    fetch(base + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Forwarded-For": ip },
+      body: JSON.stringify(body),
+    });
+  try {
+    const a = (await (
+      await post("192.0.2.1", "/api/draws", { count: 1 })
+    ).json()) as DrawRecord;
+    const blocked = await post("::ffff:192.0.2.1", "/api/draws/import", {
+      version: data.version,
+      ratingVersion: data.rating,
+      ids: [525],
+    });
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).error.code, "DRAW_RATE_LIMIT");
+    const b = (await (
+      await post("192.0.2.2", "/api/draws", { count: 1 })
+    ).json()) as DrawRecord;
+    assert.equal(
+      (await post("192.0.2.1", `/api/draws/${a.id}/interpret`, {})).status,
+      200,
+    );
+    const limited = await post("192.0.2.1", `/api/draws/${b.id}/interpret`, {});
+    assert.equal(limited.status, 429);
+    assert.equal((await limited.json()).error.code, "RATE_LIMIT");
+    assert.equal(
+      (await post("192.0.2.2", `/api/draws/${b.id}/interpret`, {})).status,
+      200,
+    );
+    assert.equal(calls, 2);
+  } finally {
+    await service.drain();
+    await new Promise<void>((resolve) => app.close(() => resolve()));
+    store.close();
   }
 });
