@@ -10,12 +10,13 @@
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm data:prepare
 cp .env.example .env.local
 # 在 .env.local 中填写 DEEPSEEK_API_KEY（可选）
 pnpm dev
 ```
 
-打开 `http://localhost:5173`。项目自带离线词表，无需另行下载。
+打开 `http://localhost:5173`。首次准备词表需要访问 Hugging Face；之后复用通过校验的本地文件，应用运行时无需访问 Hugging Face。
 
 ## 配置
 
@@ -36,13 +37,14 @@ pnpm dev
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm data:prepare
 cp .env.example .env.local
 # 按需配置 API key 和数据库路径
 pnpm build
 pnpm start
 ```
 
-访问 `http://127.0.0.1:3001`；`/api/health` 可用于检查服务状态。`pnpm start` 同时提供页面和 API，部署时需保留项目源码与依赖，不能只上传 `dist/`。
+访问 `http://127.0.0.1:3001`；`/api/health` 可用于检查服务状态。`pnpm start` 同时提供页面和 API，部署时需保留项目源码、生成的 `public/data/` 与依赖，不能只上传 `dist/`。
 
 通过 systemd 等进程管理器保持服务运行，工作目录设为项目根目录。在前方配置 HTTPS 反向代理，将请求转发至 `127.0.0.1:3001`，并保留原始 `Host`。分享链接需要接收者能访问此服务；剪贴板和系统分享通常需要 HTTPS。
 

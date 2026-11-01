@@ -9,13 +9,15 @@
     "preview": "vite preview --host 0.0.0.0",
     "data": "node --import tsx scripts/prepare-data.ts",
     "download": "node scripts/download.mjs",
-    "test": "pnpm run test:core && pnpm run test:server",
+    "test": "pnpm run test:data && pnpm run test:core && pnpm run test:server",
     "test:browser": "playwright test",
     "format": "prettier --write src server scripts tests index.html rules.html package.json tsconfig.json vite.config.ts playwright.config.ts README.md",
     "dev:api": "node --env-file-if-exists=.env.local --import tsx --watch server/index.ts",
     "start": "node --env-file-if-exists=.env.local --import tsx server/index.ts",
     "test:core": "node --import tsx tests/core.test.ts",
-    "test:server": "node --import tsx tests/server.test.ts"
+    "test:server": "node --import tsx tests/server.test.ts",
+    "data:prepare": "pnpm run download && pnpm run data",
+    "test:data": "node --test tests/download.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.66.0",

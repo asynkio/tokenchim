@@ -13,3 +13,8 @@ var/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Downloaded source and reproducible generated vocabulary
+/vendor/tokenizer.json
+/vendor/*.tmp
+/public/data/tokens.json

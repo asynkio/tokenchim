@@ -14,6 +14,7 @@
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm data:prepare
 pnpm test
 pnpm run build
 pnpm exec playwright install chromium
@@ -60,6 +61,10 @@ pnpm run test:browser
 接口错误统一为 `{ "error": { "code": "…", "message": "…" } }`；限流响应包含 `Retry-After`。服务器默认仅监听本机，采用单进程 SQLite；API 仅供同源前端调用，不接受客户端传入模型提示词或卡片内容。
 
 ## 数据来源与再生成
+
+- 不将 `vendor/tokenizer.json` 与 `public/data/tokens.json` 加入 Git；保留许可证和小型来源元数据。首次开发、CI 测试和服务器构建前运行 `pnpm data:prepare`。
+- 下载固定 revision，并验证 SHA-256；本地源文件校验通过时复用，损坏时重新下载。下载失败或哈希不符时非零退出，不覆盖旧文件。应用运行时只读取本地生成数据，不下载词表。
+- `pnpm test:data` 通过模拟下载验证缓存、下载失败与哈希校验；不访问外网。
 
 官方仓库：[deepseek-ai/DeepSeek-V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2)。固定 revision：`a7e62ac04ecb2c0a54d736dc46601c5606cf10a6`。
 
