@@ -4,26 +4,26 @@
 
 ## 本地运行
 
-需要 **Node.js 24+**（使用内置 SQLite）。
+需要 **Node.js 24+**（使用内置 SQLite）和 **pnpm 12.5.1**（版本固定在 `packageManager` 中）。
 
 ```sh
-npm ci
+pnpm install --frozen-lockfile
 cp .env.example .env.local
 # 编辑 .env.local，填入 DEEPSEEK_API_KEY；密钥只在后端使用。
-npm run dev
+pnpm run dev
 ```
 
 开发页面默认在 `http://localhost:5173`，后端默认在 `http://127.0.0.1:3001`。Vite 自动代理 API；一个命令启动两者。没有 API key 也可以抽签、保存签单、分享和导出，点击释读会提示尚未配置。项目包含完整离线词表，运行无需访问 Hugging Face。
 
 ```sh
-npm test         # 7 项核心测试 + 后端接口/持久化/模型模拟测试
-npm run build   # 前后端 TypeScript 检查 + Vite 生产构建
-npm start       # Node 托管 dist/ 和 /api，默认端口 3001
+pnpm test        # 7 项核心测试 + 后端接口/持久化/模型模拟测试
+pnpm run build   # 前后端 TypeScript 检查 + Vite 生产构建
+pnpm start       # Node 托管 dist/ 和 /api，默认端口 3001
 ```
 
-`npm run preview` 只预览前端静态资源，不包含 API；完整生产验证请使用 `npm start`。
+`pnpm run preview` 只预览前端静态资源，不包含 API；完整生产验证请使用 `pnpm start`。
 
-浏览器测试：先执行 `npx playwright install chromium`，再运行 `npm run test:browser`。测试启动隔离的前后端（5174 / 3002）与临时 SQLite 库，明确使用空 API key，DeepSeek 响应全部模拟，不消耗真实额度。
+浏览器测试：先执行 `pnpm exec playwright install chromium`，再运行 `pnpm run test:browser`。测试启动隔离的前后端（5174 / 3002）与临时 SQLite 库，明确使用空 API key，DeepSeek 响应全部模拟，不消耗真实额度。
 
 本次交付不包含线上部署。签单分享需要接收者能访问同一个后端；localhost 链接只适合本机。`DATABASE_PATH` 默认 `var/tokenchim.sqlite`，成功签单和释读无自动过期，重启后仍存在；备份前先停止服务，复制整个数据库目录即可。数据库文件与 `.env.local` 已被 Git 忽略。
 
@@ -69,9 +69,9 @@ npm start       # Node 托管 dist/ 和 /api，默认端口 3001
 词表遵循仓库 MIT 许可证，原文保留于 `vendor/LICENSE` 和 `public/data/LICENSE`。来源、哈希、版本、计数记录在 `public/data/provenance.json`。
 
 ```sh
-npm run download # 从固定官方 revision 下载 tokenizer.json 与 LICENSE（需要网络）
-npm run data     # 验证哈希、逆向 ByteLevel、合并 added tokens、评级并生成离线数据
-npm test
+pnpm run download # 从固定官方 revision 下载 tokenizer.json 与 LICENSE（需要网络）
+pnpm run data     # 验证哈希、逆向 ByteLevel、合并 added tokens、评级并生成离线数据
+pnpm test
 ```
 
 基础词表 128,000 项，818 个 added tokens，其中 3 个覆盖已有 ID，合并得到 128,815 个唯一 ID。普通 token 逆向 GPT-2 ByteLevel 字节映射；added tokens 直接 UTF-8 编码。保存 ID、原始表示、可见文本、完整十六进制字节、长度、官方 special 标志和应用分类。
