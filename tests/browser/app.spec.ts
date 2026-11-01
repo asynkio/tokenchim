@@ -6,6 +6,44 @@ const data: Dataset = JSON.parse(
 );
 const fragment = (ids: number[]) =>
   "#v=ds-v4.1-flash-1017-1bae0e1&r=rank-v1&ids=" + ids.join(",");
+test("three mobile tokens fit the first viewport without clipping", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const viewport of [
+    { width: 375, height: 667 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/" + fragment([24615, 24616, 24617]));
+    await expect(page.locator(".revealed")).toHaveCount(3);
+    await page.evaluate(() => document.fonts.ready);
+    const layout = await page.locator(".revealed").evaluateAll((cards) =>
+      cards.map((card) => {
+        const rect = card.getBoundingClientRect();
+        const text = card.querySelector(".token-text")!;
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          fits:
+            text.scrollHeight <= text.clientHeight &&
+            text.scrollWidth <= text.clientWidth,
+        };
+      }),
+    );
+    for (const card of layout) {
+      expect(card.top).toBeGreaterThanOrEqual(0);
+      expect(card.bottom).toBeLessThanOrEqual(viewport.height);
+      expect(card.fits).toBeTruthy();
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(viewport.width);
+    if (viewport.width === 390)
+      await page.screenshot({ path: "test-results/mobile-three-tokens.png" });
+  }
+});
 for (const width of [1280, 600, 390]) {
   for (const count of [1, 2]) {
     test(`${count} cards are centered at ${width}px`, async ({ page }) => {

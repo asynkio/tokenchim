@@ -744,6 +744,9 @@ footer small {
   }
 }
 @media (max-width: 480px) {
+  header {
+    padding: 14px 16px;
+  }
   main {
     padding: 0 16px;
   }
@@ -751,7 +754,18 @@ footer small {
     display: block;
   }
   .hero h1 {
-    font-size: 34px;
+    font-size: 28px;
+    margin: 12px 0;
+  }
+  .hero {
+    padding: 14px 0 12px;
+  }
+  .intro {
+    margin: 0;
+    line-height: 1.7;
+  }
+  .machine {
+    padding: 14px 12px;
   }
   .hero .eyebrow {
     font-size: 9px;
@@ -767,12 +781,13 @@ footer small {
   }
   .cards {
     gap: 8px;
+    padding: 16px 0;
   }
   .card {
-    min-height: 235px;
+    min-height: 190px;
   }
   .sigil {
-    margin-top: 58px;
+    margin-top: 40px;
     width: 49px;
     height: 49px;
   }
@@ -817,10 +832,12 @@ footer small {
     grid-template-columns: 1fr;
   }
   .revealed {
-    min-height: 290px;
+    min-height: 112px;
   }
   .revealed .token-text {
-    font-size: 29px;
+    font-size: 24px;
+    min-height: 0;
+    padding: 8px 0;
   }
   .token-id {
     font-size: 16px;
@@ -1032,6 +1049,52 @@ footer small {
 @media (max-width: 760px) {
   .card-face {
     padding: 15px;
+  }
+}
+@media (max-width: 480px) {
+  .card-face {
+    padding: 10px 12px;
+  }
+  .card-front {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    column-gap: 12px;
+  }
+  .card-front .card-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .card-front .token-text {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+  .card-front .card-bottom {
+    align-self: end;
+    margin-top: 8px;
+  }
+  .card-front .token-id {
+    font-size: 13px;
+    letter-spacing: 0;
+  }
+  .card-front .token-meta {
+    margin: 2px 0 0;
+  }
+  .card-front .card-serial {
+    font-size: 7px;
+    letter-spacing: 0.5px;
+  }
+  .byte-details {
+    max-height: 66px;
+    margin-top: 4px;
+  }
+  .byte-details dt:first-child {
+    margin-top: 0;
+  }
+  .flip-hint {
+    margin: -4px 0 10px;
+    font-size: 9px;
   }
 }
 @media (min-width: 1000px) {
