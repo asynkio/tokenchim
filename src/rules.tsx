@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Dataset } from "./core";
 import { colors } from "./export";
 import "./style.css";
+import { ThemeToggle } from "./ThemeToggle";
 type Metadata = Pick<Dataset, "counts" | "frequencies" | "sha256">;
 function RulesPage() {
   const [data, setData] = useState<Metadata | null>(null);
@@ -28,9 +29,12 @@ function RulesPage() {
         <a className="brand" href={import.meta.env.BASE_URL}>
           ✦ TokenChim<span className="brand-cn">词元抽签所</span>
         </a>
-        <a className="nav-link" href={import.meta.env.BASE_URL}>
-          返回抽卡 ↗
-        </a>
+        <div className="header-actions">
+          <ThemeToggle />
+          <a className="nav-link" href={import.meta.env.BASE_URL}>
+            返回抽卡 ↗
+          </a>
+        </div>
       </header>
       <main className="rules-page">
         {error && (

@@ -6,6 +6,43 @@ const data: Dataset = JSON.parse(
 );
 const fragment = (ids: number[]) =>
   "#v=ds-v4.1-flash-1017-1bae0e1&r=rank-v1&ids=" + ids.join(",");
+test("theme follows system until chosen and persists across pages", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.goto("/" + fragment([24615, 24616, 24617]));
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator(".revealed")).toHaveCount(3);
+  await page.screenshot({ path: "test-results/theme-light-desktop.png" });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "切换到浅色模式" }).click();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.screenshot({ path: "test-results/theme-light-mobile.png" });
+  await page.locator(".revealed").first().click();
+  await expect(page.locator(".revealed").first()).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "分享", exact: true }).click();
+  await page.screenshot({ path: "test-results/theme-light-share.png" });
+  const [png] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "保存图片（PNG）" }).click(),
+  ]);
+  await png.saveAs("test-results/theme-light.png");
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "游戏规则" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.screenshot({
+    path: "test-results/theme-light-rules.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "切换到深色模式" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
 test("three mobile tokens fit the first viewport without clipping", async ({
   page,
 }) => {

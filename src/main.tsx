@@ -6,6 +6,7 @@ import { SharePanel } from "./SharePanel";
 import "./style.css";
 import { TokenCard } from "./TokenCard";
 import { ReadingPanel } from "./ReadingPanel";
+import { ThemeToggle } from "./ThemeToggle";
 function App() {
   const [ready, setReady] = useState(false),
     [error, setError] = useState(""),
@@ -168,9 +169,15 @@ function App() {
           </span>
           TokenChim<span className="brand-cn">词元抽签所</span>
         </a>
-        <a className="nav-link" href={`${import.meta.env.BASE_URL}rules.html`}>
-          游戏规则 <span>↗</span>
-        </a>
+        <div className="header-actions">
+          <ThemeToggle />
+          <a
+            className="nav-link"
+            href={`${import.meta.env.BASE_URL}rules.html`}
+          >
+            游戏规则 <span>↗</span>
+          </a>
+        </div>
       </header>
       <main>
         <section className="hero">

@@ -108,6 +108,8 @@ PNG 使用 Canvas，本地生成，使用卡片相同的文本、逐字符换行
 
 外部字体为可选增强，网络不可用时回退到系统字体。浏览器剪贴板和系统分享通常需要 HTTPS 或 localhost；Web Crypto 与 Canvas 为必需浏览器能力。
 
+首页与规则页通过 `public/theme.js` 在渲染前初始化主题，默认跟随系统；页头切换后以 `tokenchim-theme` 保存在 localStorage，存储不可用时仍可切换。浅色主题由根元素 `data-theme` 控制，PNG 使用导出时的主题与对应字节标记颜色。浏览器回归测试默认固定深色，主题测试单独验证系统跟随与选择持久化。
+
 空格标记 `·` 单独使用本地嵌入的 TokenChimDot WOFF2 子集（源自 Liberation Mono，SIL OFL 1.1），不依赖系统中文字体。仅包含 U+00B7，页面与 PNG 均使用此字体。许可证见 `public/fonts/TokenChimDot-LICENSE.txt`。如需再生成，安装 Python `fonttools[woff]`，执行 `python3 scripts/subset-dot.py /path/to/LiberationMono-Regular.ttf`。
 
 分享入口位于召唤按钮右侧，召唤按钮始终居中。桌面打开分享 popover，移动端打开底部抽屉；点击打开时自动尝试复制链接，复制失败可在面板内手动选择。面板另提供「复制结果文本」（品牌、按抽取顺序的可见词元/ID/等级及链接）、「保存图片（PNG）」与系统分享。签单或释读变化时关闭面板，避免分享旧结果。
