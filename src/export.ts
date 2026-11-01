@@ -85,7 +85,7 @@ export async function exportPng(
     ctx.fillRect(50, y, 4, heights[i]);
     ctx.font = "bold 24px sans-serif";
     ctx.fillText(
-      `${t.grade}  /  #${t.id}  /  ${t.length} bytes · ${t.type}`,
+      `${t.grade}  /  #${t.id}  /  ${t.length} bytes`,
       80,
       y + 40,
     );
