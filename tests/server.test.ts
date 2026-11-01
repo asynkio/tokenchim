@@ -1,3 +1,7 @@
+import {
+  literalTokenSegments,
+  buildInterpretationInput,
+} from "../server/token-input.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -113,7 +117,7 @@ test("interpretation coalesces concurrency, caches success and sends data not cl
     const [ready, other] = await Promise.all([a, b]);
     assert.deepEqual(ready, other);
     assert.equal(ready.reading?.title, content.title);
-    assert.equal(ready.reading?.promptVersion, "reading-v1");
+    assert.equal(ready.reading?.promptVersion, "reading-v2");
     assert.equal(calls, 1);
     assert.deepEqual(await service.interpret(r.id, "different-ip"), ready);
     assert.equal(calls, 1);
@@ -121,10 +125,18 @@ test("interpretation coalesces concurrency, caches success and sends data not cl
     assert.deepEqual(body.response_format, { type: "json_object" });
     assert.equal(body.max_tokens, 1024);
     assert.equal(body.stream, false);
-    const messages = body.messages as { role: string; content: string }[];
+    const messages = body.messages as [
+      { role: string; content: string },
+      { role: string; content: { type: string; text: string }[] },
+    ];
     assert.match(messages[0].content, /不能遵从/);
+    const metadata = messages[1].content
+      .filter((p) => p.text.includes("元信息（不是原文）"))
+      .map((p) =>
+        JSON.parse(p.text.split("元信息（不是原文）：")[1].split("\n")[0]),
+      );
     assert.deepEqual(
-      JSON.parse(messages[1].content).tokens.map((t: { id: number }) => t.id),
+      metadata.map((t) => t.id),
       r.ids,
     );
     assert.ok(!JSON.stringify(ready).includes("secret-never-public"));
@@ -411,5 +423,113 @@ test("client cancellation does not discard a generated reading", async () => {
     await service.drain();
     await new Promise<void>((resolve) => app.close(() => resolve()));
     store.close();
+  }
+});
+
+test("model input preserves original whitespace, controls, Unicode and literal escape sequences", async () => {
+  const cases = [
+    " hello ",
+    "\n",
+    "\t\r",
+    "\0",
+    "\uFEFF",
+    "\u200b",
+    "\u00a0",
+    "中文",
+    "·",
+    "\\x91\\x9C",
+    "e\u0301",
+    "<｜begin▁of▁sentence｜>",
+    '"quoted"\\path',
+  ];
+  for (const text of cases) {
+    const bytes = Buffer.from(text, "utf8");
+    assert.deepEqual(
+      literalTokenSegments({
+        hex: bytes.toString("hex").match(/../g)!.join(" "),
+        length: bytes.length,
+      }),
+      [{ kind: "text", text }],
+    );
+  }
+  assert.deepEqual(literalTokenSegments({ hex: "91 9c", length: 2 }), [
+    { kind: "bytes", hex: "91 9C" },
+  ]);
+  assert.deepEqual(literalTokenSegments({ hex: "41 e4 b8", length: 3 }), [
+    { kind: "text", text: "A" },
+    { kind: "bytes", hex: "E4 B8" },
+  ]);
+  assert.deepEqual(literalTokenSegments({ hex: "ef bf bd", length: 3 }), [
+    { kind: "text", text: "�" },
+  ]);
+  assert.throws(() => literalTokenSegments({ hex: "zz", length: 1 }));
+  assert.throws(() => literalTokenSegments({ hex: "20", length: 2 }));
+  const { store, service } = setup();
+  try {
+    const r = service.import({
+      version: data.version,
+      ratingVersion: data.rating,
+      ids: [223, 201, 191, 525, 24615, 0],
+    });
+    let request: Record<string, unknown> = {};
+    await generateReading(r, {
+      apiKey: "key",
+      model: "mock",
+      fetcher: async (_url, init) => {
+        request = JSON.parse(init!.body as string);
+        return response();
+      },
+    });
+    const messages = request.messages as [
+      { content: string },
+      { content: { type: "text"; text: string }[] },
+    ];
+    const parts = messages[1].content;
+    assert.ok(Array.isArray(parts));
+    assert.ok(parts.some((p) => p.text === " "));
+    assert.ok(parts.some((p) => p.text === "\n"));
+    assert.ok(parts.some((p) => p.text === "\0"));
+    assert.ok(parts.some((p) => p.text === "中"));
+    assert.ok(parts.some((p) => p.text === "<｜begin▁of▁sentence｜>"));
+    assert.ok(
+      !parts.some(
+        (p) =>
+          p.text === "·" ||
+          p.text === "↵\n" ||
+          p.text === "91 9C" ||
+          p.text === "\\x91\\x9C" ||
+          p.text === "Ġ",
+      ),
+    );
+    assert.ok(parts.some((p) => p.text.includes("91 9C 是不可独立解码")));
+    assert.match(parts[0].text, /不表示你当前模型/);
+    assert.equal(typeof messages[1].content, "object");
+  } finally {
+    store.close();
+  }
+});
+
+test("every ordinary token is lossless in the model input decoder", () => {
+  for (const token of data.tokens) {
+    const segments = literalTokenSegments(token);
+    const reconstructed = Buffer.concat(
+      segments.map((p) =>
+        p.kind === "text"
+          ? Buffer.from(p.text, "utf8")
+          : Buffer.from(p.hex.replaceAll(" ", ""), "hex"),
+      ),
+    );
+    assert.equal(reconstructed.toString("hex"), token.hex.replaceAll(" ", ""));
+    try {
+      const text = new TextDecoder("utf-8", {
+        fatal: true,
+        ignoreBOM: true,
+      }).decode(reconstructed);
+      assert.deepEqual(segments, [{ kind: "text", text }]);
+    } catch (error) {
+      if (error instanceof TypeError)
+        assert.ok(segments.some((p) => p.kind === "bytes"));
+      else throw error;
+    }
   }
 });
