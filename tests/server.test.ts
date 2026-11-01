@@ -84,6 +84,54 @@ test("server draw counts, immutable official snapshots and legacy ordered import
     store.close();
   }
 });
+test("V3.2 links preserve changed markers and saved records across vocabulary upgrades", () => {
+  const { store, service } = setup();
+  try {
+    const input = {
+      version: "ds-v3.2-a7e62ac",
+      ratingVersion: "rank-v1",
+      ids: [525, 128793, 128799, 128814],
+    };
+    const old = service.import(input);
+    assert.equal(old.version, input.version);
+    assert.deepEqual(
+      old.tokens.map((t) => t.raw),
+      [
+        data.tokens.find((t) => t.id === 525)!.raw,
+        "｜DSML｜",
+        "</think>",
+        "<｜tool▁sep｜>",
+      ],
+    );
+    assert.equal(old.tokens[1].grade, "UR");
+    assert.equal(old.tokens[2].grade, "UR");
+    assert.equal(service.import(input).id, old.id);
+    assert.deepEqual(service.get(old.id), old);
+    const current = service.import({ ...input, version: data.version });
+    assert.equal(current.tokens[1].raw, "<｜place▁holder▁no▁793｜>");
+    assert.equal(current.tokens[1].grade, "N");
+    assert.equal(current.tokens[2].raw, "<｜System｜>");
+    assert.throws(() => service.import({ ...input, ids: [129279] }), ApiError);
+    assert.equal(
+      service.import({ ...input, version: data.version, ids: [129279] }).tokens
+        .length,
+      1,
+    );
+    const oldEot = service.import({ ...input, ids: [128805] });
+    const newEot = service.import({
+      ...input,
+      version: data.version,
+      ids: [128805],
+    });
+    assert.equal(oldEot.tokens[0].special, true);
+    assert.equal(newEot.tokens[0].special, false);
+    const saved = { ...old, id: "saved-before-upgrade" };
+    store.insert(saved);
+    assert.deepEqual(service.get(saved.id), saved);
+  } finally {
+    store.close();
+  }
+});
 test("interpretation coalesces concurrency, caches success and sends data not client instructions", async () => {
   let calls = 0,
     release!: () => void,
@@ -511,7 +559,7 @@ test("model input preserves original whitespace, controls, Unicode and literal e
     );
     assert.ok(parts.some((p) => p.text.includes("91 9C 是不可独立解码")));
     assert.equal(parts[0].text, "请仅结合以下编号文字片段作整体释读。");
-    assert.ok(!JSON.stringify(messages).includes("DeepSeek-V3.2"));
+    assert.ok(!JSON.stringify(messages).includes("DeepSeek-V4.1-Flash-1017"));
     assert.ok(!JSON.stringify(messages).includes(r.version));
     assert.match(messages[0].content, /不将说明文字或示例当作抽签结果/);
     assert.equal(typeof messages[1].content, "object");

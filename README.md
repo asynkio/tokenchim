@@ -54,6 +54,6 @@ pnpm start
 
 ## 数据与许可证
 
-词表来自 [DeepSeek-V3.2](https://huggingface.co/deepseek-ai/DeepSeek-V3.2)，遵循其 MIT 许可证，详见 [词表许可证](vendor/LICENSE)。等级是游戏规则，不代表官方评价或真实词频。
+词表来自 [DeepSeek-V4.1-Flash-1017](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017)，遵循其 MIT 许可证，详见 [词表许可证](vendor/LICENSE)。等级是游戏规则，不代表官方评价或真实词频。
 
 本地嵌入的字体子集遵循 [SIL OFL 1.1](public/fonts/TokenChimDot-LICENSE.txt)。维护、测试及实现细节见 [AGENTS.md](AGENTS.md)。

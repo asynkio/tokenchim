@@ -5,7 +5,7 @@ const data: Dataset = JSON.parse(
   readFileSync("public/data/tokens.json", "utf8"),
 );
 const fragment = (ids: number[]) =>
-  "#v=ds-v3.2-a7e62ac&r=rank-v1&ids=" + ids.join(",");
+  "#v=ds-v4.1-flash-1017-1bae0e1&r=rank-v1&ids=" + ids.join(",");
 for (const width of [1280, 600, 390]) {
   for (const count of [1, 2]) {
     test(`${count} cards are centered at ${width}px`, async ({ page }) => {
@@ -412,7 +412,7 @@ test("centered summon, desktop popover, mobile drawer and clipboard fallbacks", 
   const trigger = page.getByRole("button", { name: "分享", exact: true });
   for (const width of [1280, 800, 760, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
-      await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     const [summon, controls, share] = await Promise.all([
       page.locator(".summon").boundingBox(),
       page.locator(".controls").boundingBox(),
@@ -484,7 +484,7 @@ test("centered summon, desktop popover, mobile drawer and clipboard fallbacks", 
   await expect(dialog).not.toBeVisible();
   await trigger.click();
   await page.evaluate(() => {
-    location.hash = "#v=ds-v3.2-a7e62ac&r=rank-v1&ids=525";
+    location.hash = "#v=ds-v4.1-flash-1017-1bae0e1&r=rank-v1&ids=525";
   });
   await expect(dialog).not.toBeVisible();
   await expect(page.locator(".revealed")).toHaveCount(1);

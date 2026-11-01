@@ -79,11 +79,11 @@ function RulesPage() {
               <span className="info-number">01 / 数据</span>
               <h3>来自真实的语言宇宙</h3>
               <p>
-                使用 DeepSeek-V3.2 官方词表，基础词表与 added tokens 按 ID
-                合并。所有数据随应用提供，抽取时不调用推理 API。
+                使用 DeepSeek-V4.1-Flash-1017 官方词表，基础词表与 added tokens
+                按 ID 合并。所有数据随应用提供，抽取时不调用推理 API。
               </p>
               <a
-                href="https://huggingface.co/deepseek-ai/DeepSeek-V3.2/blob/a7e62ac04ecb2c0a54d736dc46601c5606cf10a6/tokenizer.json"
+                href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/blob/1bae0e1088993b9b82de08f59de5be5a34e42170/tokenizer.json"
                 target="_blank"
                 rel="noreferrer"
               >
@@ -112,7 +112,7 @@ function RulesPage() {
               查看完整评级算法与实际数量 <span>＋</span>
             </summary>
             <p>
-              25 个非占位 added tokens 固定为 UR，793 个占位符固定为 N。其余
+              62 个非占位 added tokens 固定为 UR，1,221 个占位符固定为 N。其余
               127,997 个普通词元按综合分排序：ID 排序百分位 × 65% ＋
               字节长度经验分布中位百分位 × 35%。ID 百分位为排序序号 /
               (普通词元数 − 1)，长度百分位为（更短词元数 ＋ 同长度词元数 / 2）/
@@ -128,7 +128,7 @@ function RulesPage() {
                   {Object.entries(data.counts).map(([g, n]) => (
                     <span key={g}>
                       <b>{g}</b> {n.toLocaleString()}{" "}
-                      <small>({((n / 128815) * 100).toFixed(3)}%)</small>
+                      <small>({((n / 129280) * 100).toFixed(3)}%)</small>
                     </span>
                   ))}
                 </div>
@@ -147,7 +147,7 @@ function RulesPage() {
                         <tr key={l}>
                           <td>{l}</td>
                           <td>{n.toLocaleString()}</td>
-                          <td>{((n / 128815) * 100).toFixed(4)}%</td>
+                          <td>{((n / 129280) * 100).toFixed(4)}%</td>
                         </tr>
                       ))}
                     </tbody>

@@ -8,6 +8,7 @@ import {
   type Token,
 } from "../src/core.ts";
 import type { DrawRecord } from "../src/contracts.ts";
+import { legacyV3 } from "./legacy-v3.ts";
 import { Store } from "./store.ts";
 import { generateReading, type ProviderOptions } from "./deepseek.ts";
 import { ApiError } from "./errors.ts";
@@ -27,8 +28,8 @@ export class DrawService {
     if (
       data.version !== VOCAB_VERSION ||
       data.rating !== RATING_VERSION ||
-      data.tokens.length !== 128815 ||
-      new Set(data.tokens.map((t) => t.id)).size !== 128815
+      data.tokens.length !== 129280 ||
+      new Set(data.tokens.map((t) => t.id)).size !== 129280
     )
       throw Error("Offline vocabulary validation failed");
   }
@@ -40,11 +41,16 @@ export class DrawService {
     if (!record) throw new ApiError(404, "未找到这份签单", "DRAW_NOT_FOUND");
     return record;
   }
-  private create(tokens: Token[], source: DrawRecord["source"], key?: string) {
+  private create(
+    tokens: Token[],
+    source: DrawRecord["source"],
+    key?: string,
+    version = VOCAB_VERSION,
+  ) {
     const record: DrawRecord = {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
-      version: VOCAB_VERSION,
+      version,
       ratingVersion: RATING_VERSION,
       source,
       ids: tokens.map((t) => t.id),
@@ -83,12 +89,26 @@ export class DrawService {
     });
     let tokens: Token[];
     try {
-      tokens = decodeShare("#" + p, this.data.tokens);
+      // Preserve old IDs and grades rather than interpreting them with V4.1 markers.
+      const legacy = input.version === legacyV3.version;
+      const vocabulary = legacy
+        ? this.data.tokens
+            .filter((t) => t.id <= legacyV3.maxId)
+            .map((t) => legacyV3.overrides.find((old) => old.id === t.id) ?? t)
+        : this.data.tokens;
+      tokens = decodeShare(
+        "#" + p,
+        vocabulary,
+        legacy ? legacyV3.version : VOCAB_VERSION,
+      );
     } catch (e) {
       throw new ApiError(400, (e as Error).message, "INVALID_SHARE");
     }
     const key = p.toString();
-    return this.store.imported(key) ?? this.create(tokens, "legacy", key);
+    return (
+      this.store.imported(key) ??
+      this.create(tokens, "legacy", key, input.version)
+    );
   }
   interpret(id: string, ip: string): Promise<DrawRecord> {
     const record = this.get(id);

@@ -21,14 +21,24 @@ test("pinned official source, merged IDs, classifications and byte integrity", (
     .digest("hex");
   assert.equal(
     hash,
-    "cd050be35cae877f8f0aa847f45aa87e23835a56ca32b29b28545597852784e5",
+    "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
   );
   assert.equal(hash, d.sha256);
-  assert.equal(tokens.length, 128815);
-  assert.equal(new Set(tokens.map((t) => t.id)).size, 128815);
+  assert.equal(tokens.length, 129280);
+  assert.equal(new Set(tokens.map((t) => t.id)).size, 129280);
   assert.equal(tokens.filter((t) => t.type === "普通").length, 127997);
-  assert.equal(tokens.filter((t) => t.type === "控制标记").length, 25);
-  assert.equal(tokens.filter((t) => t.type === "占位符").length, 793);
+  assert.equal(tokens.filter((t) => t.type === "控制标记").length, 62);
+  assert.equal(tokens.filter((t) => t.type === "占位符").length, 1221);
+  for (const id of [128000, 128798, 128847, 129279]) {
+    const token = tokens.find((t) => t.id === id)!;
+    assert.equal(token.type, "占位符");
+    assert.equal(token.grade, "N");
+  }
+  for (const id of [128799, 128821, 129264, 129278]) {
+    const token = tokens.find((t) => t.id === id)!;
+    assert.equal(token.type, "控制标记");
+    assert.equal(token.grade, "UR");
+  }
   const official = JSON.parse(readFileSync("vendor/tokenizer.json", "utf8"));
   for (const a of official.added_tokens) {
     const t = tokens.find((t) => t.id === a.id)!;
@@ -46,7 +56,7 @@ test("pinned official source, merged IDs, classifications and byte integrity", (
   }
   assert.equal(
     Object.values(d.frequencies).reduce((a, b) => a + b, 0),
-    128815,
+    129280,
   );
 });
 test("display Chinese, leading whitespace, newline, invalid sequences, controls and long text", () => {
@@ -71,11 +81,11 @@ test("display Chinese, leading whitespace, newline, invalid sequences, controls 
 });
 test("rating is reproducible, exact cumulative boundaries and ID tiebreak", () => {
   assert.deepEqual(d.counts, {
-    N: 64791,
+    N: 65219,
     R: 38399,
     SR: 19200,
     SSR: 6400,
-    UR: 25,
+    UR: 62,
   });
   const cloned = tokens.map((t) => ({ ...t }));
   rankTokens(cloned.reverse());

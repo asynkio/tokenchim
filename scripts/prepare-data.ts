@@ -8,11 +8,11 @@ import {
   type Token,
 } from "../src/core.ts";
 const source =
-  "https://huggingface.co/deepseek-ai/DeepSeek-V3.2/resolve/a7e62ac04ecb2c0a54d736dc46601c5606cf10a6/tokenizer.json";
+  "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/resolve/1bae0e1088993b9b82de08f59de5be5a34e42170/tokenizer.json";
 const raw = readFileSync("vendor/tokenizer.json"),
   sha256 = createHash("sha256").update(raw).digest("hex");
 if (
-  sha256 !== "cd050be35cae877f8f0aa847f45aa87e23835a56ca32b29b28545597852784e5"
+  sha256 !== "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
 )
   throw Error("Pinned tokenizer SHA-256 mismatch");
 const data = JSON.parse(raw.toString());
@@ -72,7 +72,11 @@ for (const t of data.added_tokens)
       t.content,
       new TextEncoder().encode(t.content),
       t.special,
-      /^<｜place▁holder▁no▁\d+｜>$/.test(t.content) ? "占位符" : "控制标记",
+      /^(?:<｜place▁holder▁no▁\d+｜>|<\|place_holder_mm_span_\d+\|>)$/.test(
+        t.content,
+      )
+        ? "占位符"
+        : "控制标记",
     ),
   );
 const tokens = rankTokens([...map.values()].sort((a, b) => a.id - b.id));
@@ -83,9 +87,9 @@ for (const t of tokens) {
   frequencies[t.length] = (frequencies[t.length] || 0) + 1;
 }
 if (
-  tokens.length !== 128815 ||
-  tokens.filter((t) => t.type === "占位符").length !== 793 ||
-  counts.UR !== 25
+  tokens.length !== 129280 ||
+  tokens.filter((t) => t.type === "占位符").length !== 1221 ||
+  counts.UR !== 62
 )
   throw Error("Official vocabulary counts changed");
 mkdirSync("public/data", { recursive: true });

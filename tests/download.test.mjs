@@ -39,7 +39,7 @@ test("fresh download pins revision and writes exact source and license", async (
       urls,
       ["tokenizer.json", "LICENSE"].map(
         (name) =>
-          `https://huggingface.co/deepseek-ai/DeepSeek-V3.2/resolve/${revision}/${name}`,
+          `https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/resolve/${revision}/${name}`,
       ),
     );
     assert.deepEqual(await readFile(join(directory, "tokenizer.json")), source);

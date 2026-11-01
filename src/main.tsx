@@ -175,7 +175,7 @@ function App() {
       <main>
         <section className="hero">
           <div className="eyebrow">
-            <i /> DEEPSEEK V3.2 · TOKEN GACHA
+            <i /> DEEPSEEK V4.1 FLASH · TOKEN GACHA
           </div>
           <h1>
             你的下一次奇遇，
@@ -183,7 +183,7 @@ function App() {
             藏在一个<span className="gradient"> Token </span>里。
           </h1>
           <p className="intro">
-            128,815 个词元，等待与你相遇。
+            129,280 个词元，等待与你相遇。
             <br className="mobile-break" /> 抽一签，看看语言宇宙给你的回应。
           </p>
         </section>

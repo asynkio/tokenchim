@@ -1,4 +1,4 @@
-export const VOCAB_VERSION = "ds-v3.2-a7e62ac";
+export const VOCAB_VERSION = "ds-v4.1-flash-1017-1bae0e1";
 export const RATING_VERSION = "rank-v1";
 export type Grade = "N" | "R" | "SR" | "SSR" | "UR";
 export interface Token {
@@ -150,9 +150,13 @@ export function encodeShare(ids: number[]) {
     })
   );
 }
-export function decodeShare(hash: string, tokens: Token[]) {
+export function decodeShare(
+  hash: string,
+  tokens: Token[],
+  version = VOCAB_VERSION,
+) {
   const p = new URLSearchParams(hash.replace(/^#/, ""));
-  if (p.get("v") !== VOCAB_VERSION || p.get("r") !== RATING_VERSION)
+  if (p.get("v") !== version || p.get("r") !== RATING_VERSION)
     throw Error("分享链接版本不兼容");
   const raw = p.get("ids") || "";
   if (!/^\d+(,\d+){0,9}$/.test(raw)) throw Error("分享链接数量或格式无效");

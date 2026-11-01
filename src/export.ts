@@ -76,7 +76,7 @@ export async function exportPng(
   ctx.fillText("TokenChim / 词元抽签所", 60, 85);
   ctx.font = "22px sans-serif";
   ctx.fillStyle = "#a7b3d0";
-  ctx.fillText("DeepSeek V3.2 · 每个词元，都有它的奇遇", 60, 132);
+  ctx.fillText("DeepSeek V4.1 Flash · 每个词元，都有它的奇遇", 60, 132);
   let y = 180;
   tokens.forEach((t, i) => {
     ctx.fillStyle = "#141a2c";

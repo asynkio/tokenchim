@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const revision = "a7e62ac04ecb2c0a54d736dc46601c5606cf10a6";
+export const revision = "1bae0e1088993b9b82de08f59de5be5a34e42170";
 export const sha256 =
-  "cd050be35cae877f8f0aa847f45aa87e23835a56ca32b29b28545597852784e5";
+  "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b";
 const matches = (bytes) =>
   createHash("sha256").update(bytes).digest("hex") === sha256;
 
@@ -26,7 +26,7 @@ export async function downloadVocabulary({ root = ".", fetcher = fetch } = {}) {
     const temporary = `${target}.${process.pid}.tmp`;
     try {
       const response = await fetcher(
-        `https://huggingface.co/deepseek-ai/DeepSeek-V3.2/resolve/${revision}/${name}`,
+        `https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/resolve/${revision}/${name}`,
         { signal: AbortSignal.timeout(120000) },
       );
       if (!response.ok) throw Error(`${name}: HTTP ${response.status}`);
